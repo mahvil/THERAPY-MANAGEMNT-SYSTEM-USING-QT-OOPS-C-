@@ -1,0 +1,644 @@
+#include <QtWidgets>
+#include <QApplication>
+#include <QMessageBox>
+#include <QInputDialog>
+#include <QPushButton>
+#include <QLabel>
+#include <QVBoxLayout>
+#include <QFileDialog>
+#include <QTextBrowser>
+
+
+class AddQuoteDialog : public QDialog {
+    Q_OBJECT
+
+public:
+    AddQuoteDialog(QWidget *parent = nullptr)
+        : QDialog(parent)
+    {
+        QLabel *titleLabel = new QLabel("Add Quote", this);
+        QLabel *quoteLabel = new QLabel("Enter your quote:", this);
+        quoteEdit = new QLineEdit(this);
+
+        QPushButton *addButton = new QPushButton("Add Quote", this);
+
+        connect(addButton, &QPushButton::clicked, this, &AddQuoteDialog::addQuote);
+
+        QVBoxLayout *layout = new QVBoxLayout(this);
+        layout->addWidget(titleLabel);
+        layout->addWidget(quoteLabel);
+        layout->addWidget(quoteEdit);
+        layout->addWidget(addButton);
+
+
+    }
+
+signals:
+    void quoteAdded(const QString& quote);
+
+private slots:
+    void addQuote() {
+        QString quote = quoteEdit->text().trimmed();
+        if (!quote.isEmpty()) {
+            emit quoteAdded(quote);
+            accept(); // Close the dialog
+        } else {
+            QMessageBox::warning(this, "Error", "Please enter a quote.");
+        }
+    }
+
+private:
+    QLineEdit *quoteEdit;
+};
+
+class PatientWidget : public QWidget {
+    Q_OBJECT
+
+public:
+    PatientWidget(const QString& username = QString(), QWidget *parent = nullptr)
+        : QWidget(parent), username(username)
+    {
+        QLabel *titleLabel = new QLabel("Patient Options", this);
+        QPushButton *hireTherapistButton = new QPushButton("Hire Therapist", this);
+        QPushButton *viewSessionsButton = new QPushButton("View Sessions", this);
+        QPushButton *cancelSessionButton = new QPushButton("Cancel Session", this);
+        QPushButton *addQuoteButton = new QPushButton("Add Quote", this);
+        QPushButton *readQuotesButton = new QPushButton("Read Quotes", this);
+        QPushButton *addMotivationalStoryButton = new QPushButton("Add Motivational Story", this);
+        QPushButton *readMotivationalStoryButton = new QPushButton("Read Motivational Story", this);
+
+        connect(hireTherapistButton, &QPushButton::clicked, this, &PatientWidget::hireTherapist);
+        connect(viewSessionsButton, &QPushButton::clicked, this, &PatientWidget::viewSessions);
+        connect(cancelSessionButton, &QPushButton::clicked, this, &PatientWidget::cancelSession);
+        connect(addQuoteButton, &QPushButton::clicked, this, &PatientWidget::addQuote);
+        connect(readQuotesButton, &QPushButton::clicked, this, &PatientWidget::readQuotes);
+        connect(addMotivationalStoryButton, &QPushButton::clicked, this, &PatientWidget::addMotivationalStory);
+        connect(readMotivationalStoryButton, &QPushButton::clicked, this, &PatientWidget::readMotivationalStory);
+        connect(hireTherapistButton, &QPushButton::clicked, this, &PatientWidget::hireTherapist);
+
+        QVBoxLayout *layout = new QVBoxLayout(this);
+        layout->addWidget(titleLabel);
+        layout->addWidget(hireTherapistButton);
+        layout->addWidget(viewSessionsButton);
+        layout->addWidget(cancelSessionButton);
+        layout->addWidget(addQuoteButton);
+        layout->addWidget(readQuotesButton);
+        layout->addWidget(addMotivationalStoryButton);
+        layout->addWidget(readMotivationalStoryButton);
+        layout->addStretch();
+
+        setLayout(layout);
+    }
+
+signals:
+    void patientInfoRequested(const QString& username);
+    void returnToLogin();
+public slots:
+    void goToLoginScreen() {
+        emit returnToLogin();
+    }
+    void hireTherapist() {
+        // Ask the patient to choose a therapy category
+        QStringList categories;
+        categories << "Mood Disorders" << "Anxiety Disorders" << "Trauma and PTSD"
+                   << "Relationship Issues" << "Stress Management" << "Substance Abuse"
+                   << "Eating Disorders" << "Self-Esteem and Identity Issues"
+                   << "Grief and Loss" << "Psychological Disorders";
+
+        QString category = QInputDialog::getItem(this, "Choose Therapy Category", "Select a therapy category:", categories);
+
+        if (!category.isEmpty()) {
+            // Show therapist profiles for the selected category
+            QString fileName = category.toLower().replace(" ", "_") + "_therapists.txt";
+            QFile file(fileName);
+            if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+                QTextStream stream(&file);
+                QString therapistProfiles = stream.readAll();
+                file.close();
+
+                if (!therapistProfiles.isEmpty()) {
+                    // Use QTextBrowser to display formatted text
+                    QTextBrowser *textBrowser = new QTextBrowser(this);
+                    textBrowser->setPlainText(therapistProfiles);
+                    textBrowser->setReadOnly(true);
+
+                    QDialog dialog(this);
+                    QVBoxLayout *layout = new QVBoxLayout(&dialog);
+                    layout->addWidget(textBrowser);
+
+                    // Allow the patient to enter therapist, date, and time
+                    QLineEdit *therapistEdit = new QLineEdit(&dialog);
+                    QLineEdit *dateEdit = new QLineEdit(&dialog);
+                    QLineEdit *timeEdit = new QLineEdit(&dialog);
+
+                    layout->addWidget(new QLabel("Therapist:", &dialog));
+                    layout->addWidget(therapistEdit);
+                    layout->addWidget(new QLabel("Date (YYYY-MM-DD):", &dialog));
+                    layout->addWidget(dateEdit);
+                    layout->addWidget(new QLabel("Time:", &dialog));
+                    layout->addWidget(timeEdit);
+
+                    QPushButton *scheduleButton = new QPushButton("Schedule Session", &dialog);
+                    layout->addWidget(scheduleButton);
+
+                    connect(scheduleButton, &QPushButton::clicked, [&]() {
+                        QString therapist = therapistEdit->text().trimmed();
+                        QString date = dateEdit->text().trimmed();
+                        QString time = timeEdit->text().trimmed();
+
+                        if (!therapist.isEmpty() && !date.isEmpty() && !time.isEmpty()) {
+                            saveSessionInformation(therapist, date, time);
+                            QMessageBox::information(this, "Session Scheduled", "Session scheduled successfully!");
+                            dialog.accept(); // Close the dialog
+                        } else {
+                            QMessageBox::warning(&dialog, "Error", "Please fill in all fields.");
+                        }
+                    });
+
+                    dialog.setWindowTitle("Therapist Profiles");
+                    dialog.exec();
+                } else {
+                    QMessageBox::information(this, "Therapist Profiles", "No therapists available in the selected category.");
+                }
+            } else {
+                QMessageBox::critical(this, "Error", "Unable to open " + fileName + " for reading.");
+            }
+        }
+    }
+
+    void viewSessions() {
+        QString fileName = "patient_sessions.txt";
+        QFile file(fileName);
+        if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            QTextStream stream(&file);
+            QString sessions = stream.readAll();
+            file.close();
+
+            if (!sessions.isEmpty()) {
+                // Use QTextBrowser to display formatted text
+                QTextBrowser *textBrowser = new QTextBrowser(this);
+                textBrowser->setPlainText(sessions);
+                textBrowser->setReadOnly(true);
+
+                QDialog dialog(this);
+                QVBoxLayout *layout = new QVBoxLayout(&dialog);
+                layout->addWidget(textBrowser);
+                dialog.setWindowTitle("Patient Sessions");
+                dialog.exec();
+            } else {
+                QMessageBox::information(this, "Patient Sessions", "No sessions available.");
+            }
+        } else {
+            QMessageBox::critical(this, "Error", "Unable to open " + fileName + " for reading.");
+        }
+    }
+
+    void cancelSession() {
+        // Implement the cancel session functionality for the patient
+        QString fileName = "patient_sessions.txt";
+        QFile file(fileName);
+        if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            QTextStream stream(&file);
+            QString sessions = stream.readAll();
+            file.close();
+
+            if (!sessions.isEmpty()) {
+                // Show available sessions to the patient
+                QStringList sessionList = sessions.split("\n---------------------------------\n");
+                QStringList sessionDetails;
+                for (const QString& session : sessionList) {
+                    sessionDetails = session.split("\n");
+                    if (sessionDetails.size() >= 4) {
+                        QString patient = sessionDetails[0].mid(9).trimmed(); // Extract patient name
+                        QString therapist = sessionDetails[1].mid(11).trimmed(); // Extract therapist name
+                        QString date = sessionDetails[2].mid(6).trimmed(); // Extract session date
+                        QString time = sessionDetails[3].mid(6).trimmed(); // Extract session time
+
+                        QString sessionInfo = "Patient: " + patient + "\nTherapist: " + therapist +
+                                              "\nDate: " + date + "\nTime: " + time;
+
+                        // Show session details to the patient and ask for cancellation
+                        int choice = QMessageBox::question(this, "Cancel Session", "Do you want to cancel this session?\n\n" + sessionInfo,
+                                                           QMessageBox::Yes | QMessageBox::No);
+                        if (choice == QMessageBox::Yes) {
+                            // Remove the session details from the file
+                            sessions.remove(session);
+                            QMessageBox::information(this, "Session Canceled", "Session canceled successfully!");
+                            // Update the file with modified session list
+                            if (file.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
+                                QTextStream writeStream(&file);
+                                writeStream << sessions;
+                                file.close();
+                            }
+                            return;
+                        }
+                    }
+                }
+                QMessageBox::information(this, "Cancel Session", "No sessions available to cancel.");
+            } else {
+                QMessageBox::information(this, "Cancel Session", "No sessions available.");
+            }
+        } else {
+            QMessageBox::critical(this, "Error", "Unable to open " + fileName + " for reading.");
+        }
+    }
+    void addQuote() {
+        // Show a dialog to allow the patient to add a quote
+        AddQuoteDialog *addQuoteDialog = new AddQuoteDialog(this);
+        connect(addQuoteDialog, &AddQuoteDialog::quoteAdded, this, &PatientWidget::handleQuoteAdded);
+        addQuoteDialog->exec();
+    }
+
+    void readQuotes() {
+        // Read quotes from the file and display them to the patient
+        QFile file("patient_quotes.txt");
+        if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            QTextStream stream(&file);
+            QString quotes = stream.readAll();
+            file.close();
+            QMessageBox::information(this, "Patient Quotes", quotes);
+        } else {
+            QMessageBox::critical(this, "Error", "Unable to open patient_quotes.txt for reading.");
+        }
+    }
+    void addMotivationalStory() {
+        // Show a dialog to allow the patient to add a motivational story
+        QString story = QInputDialog::getMultiLineText(this, "Add Motivational Story", "Enter your motivational story:");
+        if (!story.isEmpty()) {
+            saveMotivationalStory(story);
+        } else {
+            QMessageBox::warning(this, "Error", "Please enter a motivational story.");
+        }
+    }
+
+    void readMotivationalStory() {
+        // Read motivational stories from the file and display them to the patient
+        QString fileName = "patient_motivational_stories.txt";
+        QFile file(fileName);
+        if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            QTextStream stream(&file);
+            QString stories = stream.readAll();
+            file.close();
+
+            if (!stories.isEmpty()) {
+                // Use QTextBrowser to display formatted text
+                QTextBrowser *textBrowser = new QTextBrowser(this);
+                textBrowser->setPlainText(stories);
+                textBrowser->setReadOnly(true);
+
+                QDialog dialog(this);
+                QVBoxLayout *layout = new QVBoxLayout(&dialog);
+                layout->addWidget(textBrowser);
+                dialog.setWindowTitle("Motivational Stories");
+                dialog.exec();
+            } else {
+                QMessageBox::information(this, "Motivational Stories", "No motivational stories available.");
+            }
+        } else {
+            QMessageBox::critical(this, "Error", "Unable to open " + fileName + " for reading.");
+        }
+    }
+
+
+
+
+private slots:
+    void handleQuoteAdded(const QString& quote) {
+        // Save the quote to the file
+        QFile file("patient_quotes.txt");
+        if (file.open(QIODevice::Append | QIODevice::Text)) {
+            QTextStream stream(&file);
+            stream << quote << "\n";
+            file.close();
+            QMessageBox::information(this, "Quote Added", "Quote added successfully!");
+        } else {
+            QMessageBox::critical(this, "Error", "Unable to open patient_quotes.txt for writing.");
+        }
+    }
+    void handleMotivationalStoryAdded(const QString& story) {
+        saveMotivationalStory(story);
+        QMessageBox::information(this, "Motivational Story Added", "Motivational story added successfully!");
+    }
+
+private:
+    QString username;
+    void saveMotivationalStory(const QString& story) {
+        // Save the motivational story to the file
+        QString fileName = "patient_motivational_stories.txt";
+        QFile file(fileName);
+        if (file.open(QIODevice::Append | QIODevice::Text)) {
+            QTextStream stream(&file);
+            stream << story << "\n\n";
+            file.close();
+        } else {
+            QMessageBox::critical(this, "Error", "Unable to open " + fileName + " for writing.");
+        }
+    }
+    void saveSessionInformation(const QString& therapist, const QString& date, const QString& time) {
+        QString patientFullName = QInputDialog::getText(this, "Enter Your Full Name", "Enter your full name:");
+        if (patientFullName.isEmpty()) {
+            QMessageBox::warning(this, "Error", "Please enter your full name.");
+            return;
+        }
+
+        QString fileName = "patient_sessions.txt";
+        QFile file(fileName);
+        if (file.open(QIODevice::Append | QIODevice::Text)) {
+            QTextStream stream(&file);
+            stream << "Patient: " << patientFullName << "\n";
+            stream << "Therapist: " << therapist << "\n";
+            stream << "Date: " << date << "\n";
+            stream << "Time: " << time << "\n";
+            stream << "---------------------------------\n";
+            file.close();
+        } else {
+            QMessageBox::critical(this, "Error", "Unable to open " + fileName + " for writing.");
+        }
+    }
+};
+
+class TherapistInfoWidget : public QWidget {
+    Q_OBJECT
+
+public:
+
+    TherapistInfoWidget(const QString& username, QWidget *parent = nullptr)
+        : QWidget(parent), username(username)
+    {
+        QLabel *titleLabel = new QLabel("Enter Therapist Information", this);
+        QLabel *nameLabel = new QLabel("Full Name:", this);
+        QLabel *dobLabel = new QLabel("Date of Birth (YYYY-MM-DD):", this);
+        QLabel *qualificationLabel = new QLabel("Qualification:", this);
+        QLabel *experienceLabel = new QLabel("Job Experience (years):", this);
+        QLabel *categoryLabel = new QLabel("Choose Therapy Category:", this);
+
+        nameEdit = new QLineEdit(this);
+        dobEdit = new QLineEdit(this);
+        qualificationEdit = new QLineEdit(this);
+        experienceEdit = new QLineEdit(this);
+
+        QStringList categories;
+        categories << "Mood Disorders" << "Anxiety Disorders" << "Trauma and PTSD"
+                   << "Relationship Issues" << "Stress Management" << "Substance Abuse"
+                   << "Eating Disorders" << "Self-Esteem and Identity Issues"
+                   << "Grief and Loss" << "Psychological Disorders";
+
+        categoryCombo = new QComboBox(this);
+        categoryCombo->addItems(categories);
+
+        QPushButton *saveButton = new QPushButton("Save Information", this);
+
+        connect(saveButton, &QPushButton::clicked, this, &TherapistInfoWidget::saveTherapistInfo);
+
+        QFormLayout *layout = new QFormLayout(this);
+        layout->addRow(titleLabel);
+        layout->addRow(nameLabel, nameEdit);
+        layout->addRow(dobLabel, dobEdit);
+        layout->addRow(qualificationLabel, qualificationEdit);
+        layout->addRow(experienceLabel, experienceEdit);
+        layout->addRow(categoryLabel, categoryCombo);
+        layout->addRow(saveButton);
+
+        setLayout(layout);
+    }
+
+
+signals:
+    void therapistInfoSaved(const QString& username, const QString& category);
+
+private slots:
+    void saveTherapistInfo() {
+        QString fullName = nameEdit->text().trimmed();
+        QString dob = dobEdit->text().trimmed();
+        QString qualification = qualificationEdit->text().trimmed();
+        QString experience = experienceEdit->text().trimmed();
+        QString category = categoryCombo->currentText();
+
+        if (fullName.isEmpty() || dob.isEmpty() || qualification.isEmpty() || experience.isEmpty()) {
+            QMessageBox::warning(this, "Error", "Please fill in all fields.");
+            return;
+        }
+
+        QString fileName = category.toLower().replace(" ", "_") + "_therapists.txt";
+        QFile file(fileName);
+        if (file.open(QIODevice::Append | QIODevice::Text)) {
+            QTextStream stream(&file);
+            stream << "Therapist: " << username << "\n";
+            stream << "Full Name: " << fullName << "\n";
+            stream << "Date of Birth: " << dob << "\n";
+            stream << "Qualification: " << qualification << "\n";
+            stream << "Job Experience: " << experience << " years\n";
+            stream << "Category: " << category << "\n";
+            stream << "---------------------------------\n";
+            file.close();
+            QMessageBox::information(this, "Therapist Info", "Therapist information saved!");
+            emit therapistInfoSaved(username, category);
+        } else {
+            QMessageBox::critical(this, "Error", "Unable to open " + fileName + " for writing.");
+        }
+    }
+
+private:
+    QLineEdit *nameEdit;
+    QLineEdit *dobEdit;
+    QLineEdit *qualificationEdit;
+    QLineEdit *experienceEdit;
+    QComboBox *categoryCombo;
+    QString username;
+};
+
+
+class TherapistWidget : public QWidget {
+    Q_OBJECT
+
+public:
+    TherapistWidget(const QString& username = QString(), QWidget *parent = nullptr)
+        : QWidget(parent), username(username)
+    {
+        QLabel *titleLabel = new QLabel("Therapist Options", this);
+        QPushButton *profileButton = new QPushButton("Make/Edit Profile", this);
+        QPushButton *viewSessionsButton = new QPushButton("View Sessions", this);
+        QPushButton *cancelSessionButton = new QPushButton("Cancel Session", this);
+
+        connect(profileButton, &QPushButton::clicked, this, &TherapistWidget::makeEditProfile);
+        connect(viewSessionsButton, &QPushButton::clicked, this, &TherapistWidget::viewSessions);
+        connect(cancelSessionButton, &QPushButton::clicked, this, &TherapistWidget::cancelSession);
+
+        QVBoxLayout *layout = new QVBoxLayout(this);
+        layout->addWidget(titleLabel);
+        layout->addWidget(profileButton);
+        layout->addWidget(viewSessionsButton);
+        layout->addWidget(cancelSessionButton);
+        layout->addStretch();
+
+        setLayout(layout);
+    }
+
+signals:
+    void therapistInfoRequested(const QString& username);
+    void returnToLogin();
+public slots:
+    void goToLoginScreen() {
+        emit returnToLogin();
+    }
+    void makeEditProfile() {
+        TherapistInfoWidget *infoWidget = new TherapistInfoWidget(username);
+        connect(infoWidget, &TherapistInfoWidget::therapistInfoSaved, this, &TherapistWidget::handleTherapistInfoSaved);
+        infoWidget->show();
+    }
+
+    void viewSessions() {
+        QString fileName = "patient_sessions.txt";
+        QFile file(fileName);
+        if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            QTextStream stream(&file);
+            QString sessions = stream.readAll();
+            file.close();
+
+            if (!sessions.isEmpty()) {
+                // Use QTextBrowser to display formatted text
+                QTextBrowser *textBrowser = new QTextBrowser(this);
+                textBrowser->setPlainText(sessions);
+                textBrowser->setReadOnly(true);
+
+                QDialog dialog(this);
+                QVBoxLayout *layout = new QVBoxLayout(&dialog);
+                layout->addWidget(textBrowser);
+                dialog.setWindowTitle("Patient Sessions");
+                dialog.exec();
+            } else {
+                QMessageBox::information(this, "Patient Sessions", "No sessions available.");
+            }
+        } else {
+            QMessageBox::critical(this, "Error", "Unable to open " + fileName + " for reading.");
+        }
+    }
+
+
+    void cancelSession() {
+        QMessageBox::information(this, "Therapist", "Cancel Session functionality");
+    }
+
+private slots:
+    void handleTherapistInfoSaved(const QString& username, const QString& category) {
+        QMessageBox::information(this, "Therapist Info", "Therapist information saved in category: " + category);
+    }
+
+private:
+    QString username;
+};
+
+class LoginWidget : public QWidget {
+    Q_OBJECT
+
+public:
+    LoginWidget(QWidget *parent = nullptr)
+        : QWidget(parent)
+    {
+        QLabel *titleLabel = new QLabel("User Login", this);
+        QPushButton *registerButton = new QPushButton("Register", this);
+        QPushButton *loginButton = new QPushButton("Log In", this);
+
+        connect(registerButton, &QPushButton::clicked, this, &LoginWidget::registerUser);
+        connect(loginButton, &QPushButton::clicked, this, &LoginWidget::login);
+
+
+
+        QPixmap loginPixmap("C:/Desktop/OOPS PROJECT/FINAL/WhatsApp Image 2023-12-27 at 10.15.06 AM.jpeg"); // Assuming "login_image.jpg" is the image resource path
+        QLabel *loginImageLabel = new QLabel(this);
+        loginImageLabel->setPixmap(loginPixmap.scaled(1280, 1280, Qt::KeepAspectRatio)); // Adjust the size as needed
+
+        // Modify the layout to include the image label
+        QVBoxLayout *layout = new QVBoxLayout(this);
+        layout->addWidget(titleLabel);
+        layout->addWidget(registerButton);
+        layout->addWidget(loginButton);
+        layout->addWidget(loginImageLabel); // Add the image label to the layout
+        layout->addStretch();
+
+        setLayout(layout);
+
+    }
+
+signals:
+    void therapistLoggedIn(const QString& username);
+    void patientLoggedIn(const QString& username);
+    void showPatientHomepage(const QString& username);
+
+public slots:
+    void registerUser() {
+        QString username = QInputDialog::getText(this, "Register", "Enter your username:");
+        QString password = QInputDialog::getText(this, "Register", "Enter your password:", QLineEdit::Password);
+
+        QStringList items;
+        items << "Patient" << "Therapist";
+        QString userType = QInputDialog::getItem(this, "Register", "Select user type:", items);
+
+        QFile file("user_info.txt");
+        if (file.open(QIODevice::Append | QIODevice::Text)) {
+            QTextStream stream(&file);
+            stream << username << " " << password << " " << userType << "\n";
+            file.close();
+            QMessageBox::information(this, "Registration", "Registration successful!");
+        } else {
+            QMessageBox::critical(this, "Error", "Unable to open user_info.txt for writing.");
+        }
+    }
+
+    void login() {
+        QString username = QInputDialog::getText(this, "Log In", "Enter your username:");
+        QString password = QInputDialog::getText(this, "Log In", "Enter your password:", QLineEdit::Password);
+
+        QFile file("user_info.txt");
+        if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            QTextStream stream(&file);
+            while (!stream.atEnd()) {
+                QString line = stream.readLine();
+                QStringList parts = line.split(' ');
+                if (parts.size() == 3 && parts[0] == username && parts[1] == password) {
+                    QString userType = parts[2];
+                    file.close();
+                    if (userType != "Therapist") {
+                        emit patientLoggedIn(username);
+                        emit showPatientHomepage(username); // Emit signal to show patient homepage
+                        QMessageBox::information(this, "Login", "Login successful! User type: " + userType);
+                        return;
+                    } else {
+                        emit therapistLoggedIn(username);
+                        return;
+                    }
+                }
+            }
+            file.close();
+            QMessageBox::warning(this, "Login", "Invalid username or password.");
+        } else {
+            QMessageBox::critical(this, "Error", "Unable to open user_info.txt for reading.");
+        }
+    }
+
+    // Slot to show patient's homepage
+    void showPatientHomepageSlot(const QString& username) {
+        hide(); // Hide the login page
+        PatientWidget *patientWidget = new PatientWidget(username);
+        patientWidget->show(); // Show the patient's homepage
+    }
+};
+
+int main(int argc, char *argv[]) {
+    QApplication app(argc, argv);
+
+    LoginWidget loginWidget;
+    TherapistWidget therapistWidget;
+    PatientWidget patientWidget;
+
+    QObject::connect(&loginWidget, &LoginWidget::therapistLoggedIn, &therapistWidget, &TherapistWidget::show);
+    QObject::connect(&loginWidget, &LoginWidget::patientLoggedIn, &loginWidget, &LoginWidget::showPatientHomepage);
+    QObject::connect(&loginWidget, &LoginWidget::showPatientHomepage, &loginWidget, &LoginWidget::showPatientHomepageSlot);
+    QObject::connect(&patientWidget, &PatientWidget::returnToLogin, &loginWidget, &LoginWidget::show);
+    QObject::connect(&therapistWidget, &TherapistWidget::returnToLogin, &loginWidget, &LoginWidget::show);
+    loginWidget.show();
+
+    return app.exec();
+}
+
+#include "main.moc"
